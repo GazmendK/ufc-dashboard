@@ -1,4 +1,4 @@
-# 🥊 UFC Fighter Dashboard
+# UFC Fighter Dashboard
 
 An interactive Streamlit dashboard for exploring UFC fighter statistics scraped
 from [ufcstats.com](http://ufcstats.com/statistics/fighters).
@@ -83,22 +83,6 @@ pytest -q
 bucketing, the 0-fight data-cleanup, finish-rate / streak derivation, and z-score
 normalisation. Runs in ~2 seconds.
 
-## Screenshots
-
-> _Screenshots go here once you've run the dashboard locally._
-
-- ![Fighter Explorer](docs/screenshot-explorer.png)
-- ![Comparison Radar](docs/screenshot-comparison.png)
-- ![Stat Universe](docs/screenshot-universe.png)
-
-## Notes
-
-- Career-average stats (SLpM, Str. Acc., Str. Def., SApM, TD Avg., TD Acc.,
-  TD Def., Sub. Avg.) come from each fighter's individual detail page.
-- Weight class is derived from listed weight (lbs).
-- Per-fight history ("Last 5 fights" and head-to-head) is not yet wired up —
-  ufcstats.com publishes it on the same detail pages and can be added by
-  extending `scraper/scraper.py`.
 
 ## Tech
 
