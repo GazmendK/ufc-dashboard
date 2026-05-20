@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 import string
@@ -27,7 +25,6 @@ HEADERS = {
     )
 }
 
-# Columns scraped from the directory listing (one row per fighter).
 LIST_COLUMNS = [
     "first_name",
     "last_name",
@@ -41,7 +38,6 @@ LIST_COLUMNS = [
     "draws",
 ]
 
-# Columns scraped from each fighter's detail page.
 DETAIL_COLUMNS = [
     "slpm",
     "str_acc",
@@ -55,34 +51,31 @@ DETAIL_COLUMNS = [
 
 
 def _get(url: str, session: requests.Session, retries: int = 3) -> str:
-    """GET ``url`` and return response text, retrying on transient errors."""
     last_exc: Exception | None = None
     for attempt in range(retries):
         try:
             resp = session.get(url, headers=HEADERS, timeout=20)
             resp.raise_for_status()
             return resp.text
-        except requests.RequestException as exc:  # noqa: PERF203
+        except requests.RequestException as exc:
             last_exc = exc
             time.sleep(1 + attempt)
     raise RuntimeError(f"Failed to GET {url}: {last_exc}")
 
 
 def _clean(value: str) -> str:
-    """Strip whitespace and replace placeholder ``--`` with empty string."""
     value = (value or "").strip()
     return "" if value in {"--", "---"} else value
 
 
 def _parse_list_page(html: str) -> list[dict]:
-    """Parse one alphabetical fighter listing page."""
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", class_="b-statistics__table")
     if table is None:
         return []
 
     rows: list[dict] = []
-    for tr in table.find_all("tr")[2:]:  # skip header rows
+    for tr in table.find_all("tr")[2:]:
         cells = tr.find_all("td")
         if len(cells) < 10:
             continue
@@ -98,7 +91,6 @@ def _parse_list_page(html: str) -> list[dict]:
 
 
 def _scrape_listing(session: requests.Session) -> list[dict]:
-    """Scrape A-Z directory listing pages."""
     fighters: list[dict] = []
     for letter in string.ascii_lowercase:
         url = f"{BASE_LIST_URL}?char={letter}&page=all"
@@ -109,7 +101,6 @@ def _scrape_listing(session: requests.Session) -> list[dict]:
 
 
 def _parse_career_stats(soup: BeautifulSoup) -> dict:
-    """Extract career-average stats from a fighter's detail page."""
     text_blocks = soup.find_all("li", class_="b-list__box-list-item_type_block")
 
     wanted = {
@@ -137,13 +128,6 @@ def _parse_career_stats(soup: BeautifulSoup) -> dict:
 
 
 def _parse_fight_history(soup: BeautifulSoup, fighter_url: str) -> list[dict]:
-    """
-    Extract every bout from the fight-history table on a fighter's page.
-
-    Each row carries the result (W/L/D/NC), opponent name, method (KO/SUB/DEC),
-    round, time, event, and event date. Used downstream to derive finish
-    rates, win streaks, and last-fight activity.
-    """
     table = soup.find("table", class_="b-fight-details__table")
     if table is None:
         return []
@@ -155,28 +139,23 @@ def _parse_fight_history(soup: BeautifulSoup, fighter_url: str) -> list[dict]:
         if len(cells) < 10:
             continue
 
-        # Cell 0: W/L flag
         flag = cells[0].find("i", class_="b-flag__text")
         result = _clean(flag.get_text()) if flag else ""
 
-        # Cell 1: both fighter names (the fighter we're looking at + opponent)
         name_paragraphs = cells[1].find_all("p")
         if len(name_paragraphs) >= 2:
             names = [_clean(p.get_text()) for p in name_paragraphs]
         else:
             names = [_clean(cells[1].get_text())]
 
-        # Cell 6: event title + date (two <p> tags)
         event_paragraphs = cells[6].find_all("p") if len(cells) > 6 else []
         event_name = _clean(event_paragraphs[0].get_text()) if event_paragraphs else ""
         event_date = _clean(event_paragraphs[1].get_text()) if len(event_paragraphs) > 1 else ""
 
-        # Cell 7: method (two <p>s: e.g. "KO/TKO" + "Punch")
         method_paragraphs = cells[7].find_all("p") if len(cells) > 7 else []
         method = _clean(method_paragraphs[0].get_text()) if method_paragraphs else ""
         method_detail = _clean(method_paragraphs[1].get_text()) if len(method_paragraphs) > 1 else ""
 
-        # Cells 8/9: round/time
         round_ = _clean(cells[8].get_text()) if len(cells) > 8 else ""
         fight_time = _clean(cells[9].get_text()) if len(cells) > 9 else ""
 
@@ -195,12 +174,11 @@ def _parse_fight_history(soup: BeautifulSoup, fighter_url: str) -> list[dict]:
 
 
 def _scrape_detail(url: str, session: requests.Session) -> tuple[dict, list[dict]]:
-    """Scrape career stats + fight history for one fighter (errors → blanks)."""
     try:
         html = _get(url, session)
         soup = BeautifulSoup(html, "html.parser")
         return _parse_career_stats(soup), _parse_fight_history(soup, url)
-    except Exception:  # noqa: BLE001 - swallow per-fighter errors
+    except Exception:
         return {col: "" for col in DETAIL_COLUMNS}, []
 
 
@@ -210,7 +188,6 @@ def _enrich_with_details(
     max_workers: int = 12,
     progress=None,
 ) -> tuple[list[dict], list[dict]]:
-    """Fetch detail stats + fight history for every fighter concurrently."""
     total = len(fighters)
     completed = 0
     all_fights: list[dict] = []
@@ -233,7 +210,6 @@ def _enrich_with_details(
 
 
 def _to_dataframe(fighters: Iterable[dict]) -> pd.DataFrame:
-    """Convert raw scraped dicts into a normalized DataFrame."""
     df = pd.DataFrame(list(fighters))
     if df.empty:
         return df
@@ -259,9 +235,6 @@ def _to_dataframe(fighters: Iterable[dict]) -> pd.DataFrame:
     df["weight_class"] = df["weight_lbs"].apply(_classify_weight)
     df["total_fights"] = df["wins"] + df["losses"] + df["draws"]
 
-    # ufcstats.com publishes "0%" / "0.00" placeholders for fighters with no
-    # UFC bouts on record, which otherwise produces a fake spike at 0 in the
-    # distributions. Null those rows out so they don't pollute the charts.
     no_fights = df["total_fights"] == 0
     rate_cols = ["str_acc", "str_def", "td_acc", "td_def", "slpm", "sapm", "td_avg", "sub_avg"]
     df.loc[no_fights, rate_cols] = pd.NA
@@ -270,7 +243,6 @@ def _to_dataframe(fighters: Iterable[dict]) -> pd.DataFrame:
 
 
 def _height_to_inches(raw: str) -> float | None:
-    """Convert e.g. ``5' 11"`` to inches."""
     if not raw or "'" not in raw:
         return None
     try:
@@ -283,7 +255,6 @@ def _height_to_inches(raw: str) -> float | None:
 
 
 def _weight_to_lbs(raw: str) -> float | None:
-    """Convert e.g. ``155 lbs.`` to a float."""
     if not raw:
         return None
     digits = "".join(ch for ch in raw if ch.isdigit() or ch == ".")
@@ -291,7 +262,6 @@ def _weight_to_lbs(raw: str) -> float | None:
 
 
 def _reach_to_inches(raw: str) -> float | None:
-    """Convert e.g. ``72.0"`` to a float."""
     if not raw:
         return None
     digits = raw.replace('"', "").strip()
@@ -315,7 +285,6 @@ WEIGHT_CLASSES = [
 
 
 def _classify_weight(weight: float | None) -> str:
-    """Bucket a weight (lbs) into the closest official UFC weight class."""
     if weight is None or pd.isna(weight):
         return "Unknown"
     for name, ceiling in WEIGHT_CLASSES:
@@ -325,7 +294,6 @@ def _classify_weight(weight: float | None) -> str:
 
 
 def _parse_events_index(html: str) -> list[dict]:
-    """Parse the completed-events listing page → list of {url, name, date}."""
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", class_="b-statistics__table-events")
     if table is None:
@@ -344,13 +312,6 @@ def _parse_events_index(html: str) -> list[dict]:
 
 
 def _parse_event_detail(html: str, event_url: str) -> list[dict]:
-    """
-    Parse an event detail page → one row per fight.
-
-    Title fights are detected by looking for an ``<img>`` with a "belt"
-    indicator inside the fight row (ufcstats.com marks championship and
-    interim-title bouts this way).
-    """
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", class_="b-fight-details__table")
     if table is None:
@@ -363,19 +324,12 @@ def _parse_event_detail(html: str, event_url: str) -> list[dict]:
         if len(cells) < 7:
             continue
 
-        # Fighter names (cell 1): two <p> tags with <a>'s
         fighter_paragraphs = cells[1].find_all("p")
         fighters = [_clean(p.get_text()) for p in fighter_paragraphs[:2]]
         if len(fighters) < 2:
             continue
 
-        # Weight class (cell 6) is where the belt indicator usually sits.
-        # Title fight detection: any <img> with src/alt containing "belt",
-        # or any element class containing "belt", or the literal word
-        # "Title" / "Championship" in the cell text.
         is_title = _detect_title_fight(tr)
-
-        # Fight detail URL (the row itself often carries onclick / data-link).
         fight_link = tr.get("data-link") or ""
 
         rows.append({
@@ -389,14 +343,6 @@ def _parse_event_detail(html: str, event_url: str) -> list[dict]:
 
 
 def _detect_title_fight(row_tag) -> bool:
-    """
-    Scan one event-page fight row for a championship-belt indicator.
-
-    ufcstats.com renders title fights with a small belt icon in the row.
-    We accept any ``<img>`` with belt-ish src/alt or any element whose
-    class names contain ``belt``. No text-level fallback — event names
-    like "...Championship..." would over-flag.
-    """
     for img in row_tag.find_all("img"):
         src = (img.get("src") or "").lower()
         alt = (img.get("alt") or "").lower()
@@ -410,22 +356,14 @@ def _detect_title_fight(row_tag) -> bool:
 
 
 def _scrape_event(url: str, session: requests.Session) -> list[dict]:
-    """Scrape one event page; swallow errors per event."""
     try:
         html = _get(url, session)
         return _parse_event_detail(html, url)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return []
 
 
 def scrape_events(progress=None) -> pd.DataFrame:
-    """
-    Scrape the completed-events index + each event detail page.
-
-    Result has one row per fight, with ``is_title_fight`` populated.
-    Persists to ``data/events.csv``. Used by ``derived.py`` to flag
-    title fights in the per-fighter aggregation.
-    """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     with requests.Session() as session:
@@ -461,32 +399,20 @@ def scrape_events(progress=None) -> pd.DataFrame:
 
 
 def load_cached_events() -> pd.DataFrame | None:
-    """Return the cached events DataFrame if it exists, otherwise ``None``."""
     if not EVENTS_CSV_PATH.exists():
         return None
     try:
         return pd.read_csv(EVENTS_CSV_PATH)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 
 def scrape_fighters(progress=None) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Run the full scrape: directory listing -> detail pages -> DataFrames.
-
-    Returns a ``(fighters_df, fights_df)`` tuple. Both are also persisted to
-    ``data/fighters.csv`` and ``data/fights.csv`` respectively.
-
-    Parameters
-    ----------
-    progress : callable | None
-        Optional ``(done, total)`` callback used to drive a UI progress bar.
-    """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     with requests.Session() as session:
         if progress is not None:
-            progress(0, 1)  # signal "phase 1 starting"
+            progress(0, 1)
         fighters = _scrape_listing(session)
         fighters, all_fights = _enrich_with_details(fighters, session, progress=progress)
 
@@ -498,36 +424,29 @@ def scrape_fighters(progress=None) -> tuple[pd.DataFrame, pd.DataFrame]:
         fights_df["event_date_parsed"] = pd.to_datetime(
             fights_df["event_date"], errors="coerce", format="%b. %d, %Y"
         )
-        # Drop duplicate rows that can leak in when the same fight appears
-        # twice on a fighter's page (e.g. an original result + an
-        # overturned-to-NC re-render). One row per (fighter, event, opponent).
         fights_df = fights_df.drop_duplicates(
             subset=["fighter_url", "event", "opponent"], keep="first"
         )
     fights_df.to_csv(FIGHTS_CSV_PATH, index=False)
 
-    # Phase 2: events index + per-event title fight flags. Runs after the
-    # fighter scrape so its progress bar finishes first; events are quick.
     try:
         scrape_events(progress=progress)
-    except Exception:  # noqa: BLE001 - never block the main scrape on events
+    except Exception:
         pass
 
     return df, fights_df
 
 
 def load_cached() -> pd.DataFrame | None:
-    """Return the cached fighters DataFrame if it exists, otherwise ``None``."""
     if not CSV_PATH.exists():
         return None
     try:
         return pd.read_csv(CSV_PATH)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 
 def load_cached_fights() -> pd.DataFrame | None:
-    """Return the cached fights DataFrame if it exists, otherwise ``None``."""
     if not FIGHTS_CSV_PATH.exists():
         return None
     try:
@@ -536,25 +455,22 @@ def load_cached_fights() -> pd.DataFrame | None:
             df["event_date_parsed"] = pd.to_datetime(
                 df["event_date"], errors="coerce", format="%b. %d, %Y"
             )
-        # Belt-and-braces dedup at load time too — protects older cached
-        # CSVs that pre-date the scrape-time dedup.
         dedup_cols = [c for c in ("fighter_url", "event", "opponent") if c in df.columns]
         if dedup_cols:
             df = df.drop_duplicates(subset=dedup_cols, keep="first")
         return df
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 
 def load_or_scrape(progress=None) -> tuple[pd.DataFrame, pd.DataFrame | None]:
-    """Return cached data, falling back to a live scrape if cache is missing."""
     cached = load_cached()
     if cached is not None and not cached.empty:
         return cached, load_cached_fights()
     return scrape_fighters(progress=progress)
 
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     def _cli_progress(done: int, total: int) -> None:
         print(f"[scraper] {done}/{total}", end="\r")
 

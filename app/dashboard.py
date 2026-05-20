@@ -1,10 +1,3 @@
-"""
-Streamlit dashboard for exploring UFC fighter statistics.
-
-Run with:
-    streamlit run app/dashboard.py
-"""
-
 from __future__ import annotations
 
 import sys
@@ -13,7 +6,6 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-# Allow ``streamlit run app/dashboard.py`` to import sibling packages.
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -29,75 +21,324 @@ st.set_page_config(
 )
 
 
-# ---------------------------------------------------------------------------
-# Theming
-# ---------------------------------------------------------------------------
-
 CUSTOM_CSS = """
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+
 :root {
-    --ufc-red: #D20A0A;
-    --ufc-black: #0D0D0D;
-    --ufc-grey: #1A1A1A;
-    --ufc-white: #F5F5F5;
+    --bg-base: #0A0D14;
+    --bg-surface: #131822;
+    --bg-surface-2: #1B2230;
+    --bg-elev: #232B3A;
+    --border-subtle: rgba(255,255,255,0.06);
+    --border-strong: rgba(255,255,255,0.12);
+    --accent: #EF4444;
+    --accent-deep: #DC2626;
+    --accent-glow: rgba(239,68,68,0.18);
+    --gold: #F59E0B;
+    --emerald: #10B981;
+    --rose: #F43F5E;
+    --sky: #38BDF8;
+    --text-primary: #F4F4F5;
+    --text-secondary: #A1A1AA;
+    --text-muted: #71717A;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
+    --shadow-glow: 0 0 24px rgba(239,68,68,0.12);
 }
-.stApp { background-color: var(--ufc-black); color: var(--ufc-white); }
+
+html, body, .stApp, [class*="st-"] {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    letter-spacing: -0.01em;
+}
+
+.stApp {
+    background:
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(239,68,68,0.08), transparent 60%),
+        radial-gradient(ellipse 60% 40% at 100% 100%, rgba(56,189,248,0.05), transparent 50%),
+        var(--bg-base);
+    color: var(--text-primary);
+}
+
+.block-container {
+    padding-top: 2.5rem !important;
+    padding-bottom: 4rem !important;
+    max-width: 1400px;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: var(--text-primary) !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.02em !important;
+}
+
+h1 { font-size: 2.25rem !important; line-height: 1.15 !important; }
+h2 { font-size: 1.5rem !important; }
+h3 { font-size: 1.15rem !important; font-weight: 600 !important; }
+
+p, label, .stCaption, [data-testid="stCaptionContainer"] {
+    color: var(--text-secondary) !important;
+    font-size: 0.92rem;
+    line-height: 1.55;
+}
+
 section[data-testid="stSidebar"] {
-    background-color: var(--ufc-grey);
-    border-right: 1px solid var(--ufc-red);
+    background: linear-gradient(180deg, rgba(19,24,34,0.95) 0%, rgba(10,13,20,0.98) 100%);
+    border-right: 1px solid var(--border-subtle);
+    backdrop-filter: blur(20px);
 }
-h1, h2, h3, h4 { color: var(--ufc-white) !important; }
+section[data-testid="stSidebar"] > div { padding-top: 1.5rem; }
+section[data-testid="stSidebar"] hr {
+    border: none; border-top: 1px solid var(--border-subtle); margin: 1rem 0 !important;
+}
+
+.brand-mark {
+    display: flex; align-items: center; gap: 10px;
+    padding: 4px 8px 18px;
+}
+.brand-mark .logo {
+    width: 38px; height: 38px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    box-shadow: 0 4px 12px var(--accent-glow);
+}
+.brand-mark .label {
+    display: flex; flex-direction: column; line-height: 1.1;
+}
+.brand-mark .label strong { color: var(--text-primary); font-weight: 700; font-size: 1.05rem; letter-spacing: -0.02em;}
+.brand-mark .label span { color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; }
+
+div[data-testid="stRadio"] > div { gap: 4px; }
+div[data-testid="stRadio"] label {
+    background: transparent;
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    transition: all 160ms ease;
+    border: 1px solid transparent;
+    cursor: pointer;
+}
+div[data-testid="stRadio"] label:hover {
+    background: var(--bg-surface);
+    border-color: var(--border-subtle);
+}
+div[data-testid="stRadio"] label[data-checked="true"] {
+    background: linear-gradient(135deg, rgba(239,68,68,0.12), rgba(239,68,68,0.04));
+    border-color: rgba(239,68,68,0.35);
+    box-shadow: inset 2px 0 0 var(--accent);
+}
+div[data-testid="stRadio"] label p { color: var(--text-primary) !important; font-weight: 500; margin: 0 !important; }
+
 .stButton > button {
-    background-color: var(--ufc-red);
-    color: var(--ufc-white);
+    background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+    color: var(--text-primary);
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
+    padding: 0.6rem 1rem;
     font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: -0.005em;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.08) inset, 0 6px 16px rgba(239,68,68,0.25);
+    transition: transform 120ms ease, box-shadow 200ms ease, filter 200ms ease;
 }
-.stButton > button:hover { background-color: #b00808; color: white; }
+.stButton > button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.12) inset, 0 10px 22px rgba(239,68,68,0.32);
+    filter: brightness(1.05);
+}
+.stButton > button:active { transform: translateY(0); }
+
+.stDownloadButton > button {
+    background: var(--bg-surface-2);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-weight: 500;
+}
+.stDownloadButton > button:hover { background: var(--bg-elev); }
+
 div[data-testid="stMetric"] {
-    background-color: var(--ufc-grey);
-    padding: 12px;
-    border-left: 4px solid var(--ufc-red);
-    border-radius: 4px;
+    background: linear-gradient(180deg, var(--bg-surface), var(--bg-surface-2));
+    padding: 16px 18px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    transition: border-color 200ms ease, transform 200ms ease;
 }
+div[data-testid="stMetric"]:hover {
+    border-color: rgba(239,68,68,0.35);
+    transform: translateY(-1px);
+}
+div[data-testid="stMetric"] label {
+    color: var(--text-muted) !important;
+    font-size: 0.72rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600 !important;
+}
+div[data-testid="stMetricValue"] {
+    color: var(--text-primary) !important;
+    font-size: 1.6rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.02em;
+    margin-top: 6px;
+}
+
+div[data-testid="stSelectbox"] > div > div,
+div[data-testid="stMultiSelect"] > div > div,
+div[data-testid="stTextInput"] > div > div,
+div[data-testid="stNumberInput"] > div > div {
+    background: var(--bg-surface) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: var(--radius-sm) !important;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+div[data-testid="stSelectbox"] > div > div:hover,
+div[data-testid="stMultiSelect"] > div > div:hover,
+div[data-testid="stTextInput"] > div > div:hover {
+    border-color: var(--border-strong) !important;
+}
+div[data-testid="stSelectbox"] > div > div:focus-within,
+div[data-testid="stMultiSelect"] > div > div:focus-within,
+div[data-testid="stTextInput"] > div > div:focus-within {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px var(--accent-glow) !important;
+}
+
+div[data-testid="stSlider"] > div > div > div > div {
+    background: linear-gradient(90deg, var(--accent), var(--accent-deep)) !important;
+}
+div[data-testid="stSlider"] [role="slider"] {
+    background: white !important;
+    border: 3px solid var(--accent) !important;
+    box-shadow: 0 0 0 4px rgba(239,68,68,0.18) !important;
+}
+
+div[data-testid="stCheckbox"] label {
+    color: var(--text-primary) !important;
+    font-weight: 500;
+}
+
+div[data-testid="stDataFrame"] {
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--bg-surface);
+}
+
 .fighter-card {
-    background-color: var(--ufc-grey);
-    border-left: 6px solid var(--ufc-red);
-    padding: 18px 22px;
-    border-radius: 6px;
-    margin-bottom: 12px;
+    background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-surface-2) 100%);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 24px 28px;
+    margin-bottom: 8px;
+    box-shadow: var(--shadow-md);
+    position: relative;
+    overflow: hidden;
 }
-.fighter-card h2 { margin: 0 0 4px 0; }
-.fighter-card .nickname { color: #BBB; font-style: italic; margin-bottom: 8px; }
-.compare-row { display: flex; align-items: center; padding: 6px 10px; border-bottom: 1px solid #222; }
-.compare-row .stat-name { flex: 1; color: var(--ufc-white); }
-.compare-row .val { flex: 1; text-align: center; font-weight: 600; }
-.win { color: #2ECC71; }
-.lose { color: #E74C3C; }
-.tie { color: #BBBBBB; }
-.info-popover {
-    background-color: var(--ufc-grey);
-    border: 1px solid var(--ufc-red);
-    border-radius: 6px;
-    padding: 14px 18px;
+.fighter-card::before {
+    content: ""; position: absolute; top: 0; left: 0;
+    width: 4px; height: 100%;
+    background: linear-gradient(180deg, var(--accent), var(--accent-deep));
+}
+.fighter-card .name-row {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 6px;
+}
+.fighter-card h2 {
+    margin: 0 !important;
+    font-size: 1.65rem !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.025em !important;
+}
+.fighter-card .nickname {
+    color: var(--text-muted); font-style: italic;
+    font-size: 0.95rem; margin-bottom: 16px;
+}
+.fighter-card .meta { color: var(--text-secondary); font-size: 0.88rem; margin: 6px 0; }
+.fighter-card .meta strong { color: var(--text-primary); font-weight: 600; }
+
+.champion-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: linear-gradient(135deg, var(--gold), #D97706);
+    color: #1A1A1A;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    box-shadow: 0 2px 8px rgba(245,158,11,0.35);
+}
+
+.record-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; }
+.record-w { background: rgba(16,185,129,0.12); color: var(--emerald); border: 1px solid rgba(16,185,129,0.25); }
+.record-l { background: rgba(244,63,94,0.12); color: var(--rose); border: 1px solid rgba(244,63,94,0.25); }
+.record-d { background: rgba(161,161,170,0.12); color: var(--text-secondary); border: 1px solid rgba(161,161,170,0.25); }
+
+.val { text-align: center; font-weight: 600; font-size: 0.95rem; padding: 6px 10px; border-radius: var(--radius-sm); }
+.stat-name { color: var(--text-secondary); text-align: center; font-size: 0.88rem; padding: 6px 10px; }
+.win  { color: var(--emerald); background: rgba(16,185,129,0.08); }
+.lose { color: var(--rose); background: rgba(244,63,94,0.08); }
+.tie  { color: var(--text-muted); }
+
+.stTabs [data-baseweb="tab-list"] { gap: 4px; border-bottom: 1px solid var(--border-subtle); }
+.stTabs [data-baseweb="tab"] {
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: 0;
+    padding: 10px 16px;
+    font-weight: 500;
+}
+.stTabs [aria-selected="true"] {
+    color: var(--text-primary) !important;
+    border-bottom: 2px solid var(--accent) !important;
+}
+
+.stAlert {
+    background: var(--bg-surface) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: var(--radius-md) !important;
+    color: var(--text-secondary) !important;
+}
+
+.stProgress > div > div > div { background: linear-gradient(90deg, var(--accent), var(--gold)) !important; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--bg-elev); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #2D3748; }
+
+.modern-section-title {
+    display: flex; align-items: center; gap: 10px;
+    margin: 28px 0 14px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.015em;
+}
+.modern-section-title::after {
+    content: ""; flex: 1; height: 1px;
+    background: linear-gradient(90deg, var(--border-strong), transparent);
 }
 </style>
 """
 
 
 def inject_theme() -> None:
-    """Inject custom CSS for the dark UFC theme."""
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
-# ---------------------------------------------------------------------------
-# Data loading
-# ---------------------------------------------------------------------------
+def _section_title(text: str) -> None:
+    st.markdown(f"<div class='modern-section-title'>{text}</div>", unsafe_allow_html=True)
+
 
 @st.cache_data(show_spinner=False)
 def _load_cached_df() -> pd.DataFrame | None:
-    """Memoized read of the CSV cache, with post-load cleanup + enrichment."""
     df = scraper.load_cached()
     if df is None or df.empty:
         return df
@@ -109,24 +350,15 @@ def _load_cached_df() -> pd.DataFrame | None:
 
 @st.cache_data(show_spinner=False)
 def _load_cached_fights() -> pd.DataFrame | None:
-    """Memoized read of the fights CSV cache."""
     return scraper.load_cached_fights()
 
 
 @st.cache_data(show_spinner=False)
 def _load_cached_events() -> pd.DataFrame | None:
-    """Memoized read of the events CSV cache."""
     return scraper.load_cached_events()
 
 
 def _clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Post-load sanity pass.
-
-    Older cached CSVs may carry the ``0.00`` / ``0%`` placeholders that
-    ufcstats.com serves for fighters with no UFC bouts on record. Null
-    those rows out so they don't pollute distributions.
-    """
     df = df.copy()
     for col in ["wins", "losses", "draws"]:
         if col in df.columns:
@@ -143,7 +375,6 @@ def _clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def get_dataframe() -> pd.DataFrame:
-    """Load fighters from cache, or fall back to a fresh scrape if missing."""
     df = _load_cached_df()
     if df is None or df.empty:
         st.warning("No cached data found — running first-time scrape. This may take a few minutes.")
@@ -152,7 +383,6 @@ def get_dataframe() -> pd.DataFrame:
 
 
 def run_scrape() -> pd.DataFrame:
-    """Run the scraper with a Streamlit progress bar, handling errors."""
     progress_bar = st.progress(0, text="Scraping ufcstats.com…")
 
     def _update(done: int, total: int) -> None:
@@ -170,7 +400,7 @@ def run_scrape() -> pd.DataFrame:
         _load_cached_events.clear()
         st.success(f"Loaded {len(df)} fighters and {len(fights)} fight rows.")
         return df
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         progress_bar.empty()
         st.error(f"Scrape failed: {exc}. Falling back to cached data if available.")
         cached = scraper.load_cached()
@@ -179,15 +409,17 @@ def run_scrape() -> pd.DataFrame:
         return cached
 
 
-# ---------------------------------------------------------------------------
-# Sidebar
-# ---------------------------------------------------------------------------
-
 def render_sidebar(df: pd.DataFrame) -> tuple[str, int, bool]:
-    """Render the sidebar and return (page, min_ufc_fights, active_only)."""
     st.sidebar.markdown(
-        "<h1 style='color:#D20A0A;margin-bottom:0;'>🥊 UFC</h1>"
-        "<p style='color:#BBB;margin-top:0;'>Fighter Dashboard</p>",
+        """
+        <div class="brand-mark">
+            <div class="logo">🥊</div>
+            <div class="label">
+                <strong>UFC Dashboard</strong>
+                <span>Fighter Analytics</span>
+            </div>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -204,17 +436,19 @@ def render_sidebar(df: pd.DataFrame) -> tuple[str, int, bool]:
     )
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown("**Data filter**")
+    st.sidebar.markdown(
+        "<div style='color:var(--text-muted);font-size:0.72rem;"
+        "text-transform:uppercase;letter-spacing:0.08em;font-weight:600;"
+        "margin-bottom:8px;'>Data filter</div>",
+        unsafe_allow_html=True,
+    )
 
-    # Prefer UFC-only fight count (from fight history) over total MMA career
-    # (from the listing page). Fall back to total_fights only if fight
-    # history isn't cached yet.
     has_ufc_count = (
         "ufc_fights_counted" in df.columns
         and df["ufc_fights_counted"].notna().any()
     )
     filter_col = "ufc_fights_counted" if has_ufc_count else "total_fights"
-    filter_label = "Min. UFC fights" if has_ufc_count else "Min. fights (total MMA — refresh for UFC-only)"
+    filter_label = "Min. UFC fights" if has_ufc_count else "Min. fights (total MMA)"
     max_fights = int(pd.to_numeric(df[filter_col], errors="coerce").max() or 30) if filter_col in df.columns else 30
     min_ufc_fights = st.sidebar.slider(
         filter_label,
@@ -222,22 +456,19 @@ def render_sidebar(df: pd.DataFrame) -> tuple[str, int, bool]:
         max_value=max(max_fights, 1),
         value=5,
         help=(
-            "Filters by actual UFC-only fight count (length of the fight-history "
-            "rows). Raise this to remove the 0/50/100% small-sample noise from "
-            "stats like TD defense %." if has_ufc_count
-            else "Fight history not loaded — slider currently uses total MMA career. "
-                 "Click **Refresh data** to enable UFC-only filtering."
+            "Filters by UFC-only completed fights." if has_ufc_count
+            else "Fight history not loaded yet — click Refresh data."
         ),
     )
 
     active_available = "is_active" in df.columns and df["is_active"].notna().any()
     active_only = st.sidebar.checkbox(
-        "Active fighters only (last fight ≤ 2y)",
+        "Active fighters only (≤ 2y)",
         value=False,
         disabled=not active_available,
         help=(
-            "Requires fight history. Run a refresh once to populate it." if not active_available
-            else "Filters out fighters who haven't competed in the last two years."
+            "Requires fight history." if not active_available
+            else "Filters out fighters inactive for over 2 years."
         ),
     )
 
@@ -248,21 +479,27 @@ def render_sidebar(df: pd.DataFrame) -> tuple[str, int, bool]:
     if active_only and active_available:
         mask &= df["is_active"].fillna(False).astype(bool)
     filtered_count = int(mask.sum())
-    st.sidebar.caption(f"{filtered_count} of {len(df)} fighters match")
+    st.sidebar.markdown(
+        f"<div style='color:var(--text-muted);font-size:0.78rem;margin-top:4px;'>"
+        f"<strong style='color:var(--text-primary);'>{filtered_count}</strong> of "
+        f"{len(df)} fighters match</div>",
+        unsafe_allow_html=True,
+    )
 
     st.sidebar.markdown("---")
-    if st.sidebar.button("🔄 Refresh data (re-scrape)"):
+    if st.sidebar.button("🔄 Refresh data", use_container_width=True):
         run_scrape()
         st.rerun()
 
     fights_loaded = scraper.FIGHTS_CSV_PATH.exists()
     if not fights_loaded:
-        st.sidebar.warning(
-            "Fight history not cached — some features are limited. "
-            "Click **Refresh data** to scrape it (adds ~3-5 min)."
-        )
+        st.sidebar.info("Fight history not cached. Click Refresh data to scrape (~3-5 min).")
 
-    st.sidebar.caption("Source: ufcstats.com")
+    st.sidebar.markdown(
+        "<div style='color:var(--text-muted);font-size:0.7rem;text-align:center;"
+        "margin-top:1rem;'>Source: ufcstats.com</div>",
+        unsafe_allow_html=True,
+    )
     return page, min_ufc_fights, active_only
 
 
@@ -271,7 +508,6 @@ def apply_global_filter(
     min_ufc_fights: int,
     active_only: bool = False,
 ) -> pd.DataFrame:
-    """Apply the sidebar UFC-fights + activity filters to ``df``."""
     if df is None or df.empty:
         return df
     has_ufc_count = (
@@ -288,10 +524,6 @@ def apply_global_filter(
     return df[mask].copy()
 
 
-# ---------------------------------------------------------------------------
-# Page 1 — Fighter Explorer
-# ---------------------------------------------------------------------------
-
 def _fmt(value, suffix: str = "") -> str:
     if value is None or (isinstance(value, float) and pd.isna(value)) or value == "":
         return "—"
@@ -301,26 +533,33 @@ def _fmt(value, suffix: str = "") -> str:
 
 
 def render_fighter_card(fighter: pd.Series) -> None:
-    """Render the styled profile card for a single fighter."""
     nickname = fighter.get("nickname") or ""
-    nickname_html = (
-        f'<div class="nickname">"{nickname}"</div>' if nickname else ""
+    nickname_html = f'<div class="nickname">"{nickname}"</div>' if nickname else ""
+    champ_badge = (
+        '<span class="champion-badge">🏆 Champion</span>'
+        if bool(fighter.get("is_champion", False)) else ""
     )
+    wins = int(fighter.get("wins", 0))
+    losses = int(fighter.get("losses", 0))
+    draws = int(fighter.get("draws", 0))
     st.markdown(
         f"""
         <div class="fighter-card">
-            <h2>{fighter.get('name', 'Unknown')}</h2>
+            <div class="name-row">
+                <h2>{fighter.get('name', 'Unknown')}</h2>
+                {champ_badge}
+            </div>
             {nickname_html}
-            <p><strong>Record:</strong>
-               <span class="win">{int(fighter.get('wins', 0))}W</span> -
-               <span class="lose">{int(fighter.get('losses', 0))}L</span> -
-               <span class="tie">{int(fighter.get('draws', 0))}D</span>
-            </p>
-            <p><strong>Style:</strong> {_fmt(fighter.get('stance'))} &nbsp;|&nbsp;
-               <strong>Weight class:</strong> {_fmt(fighter.get('weight_class'))}</p>
-            <p><strong>Height:</strong> {_fmt(fighter.get('height'))} &nbsp;|&nbsp;
-               <strong>Weight:</strong> {_fmt(fighter.get('weight'))} &nbsp;|&nbsp;
-               <strong>Reach:</strong> {_fmt(fighter.get('reach'))}</p>
+            <div style="margin: 12px 0;">
+                <span class="record-chip record-w">{wins}W</span>
+                <span class="record-chip record-l">{losses}L</span>
+                <span class="record-chip record-d">{draws}D</span>
+            </div>
+            <p class="meta"><strong>Style:</strong> {_fmt(fighter.get('stance'))}
+               &nbsp;·&nbsp; <strong>Division:</strong> {_fmt(fighter.get('weight_class'))}</p>
+            <p class="meta"><strong>Height:</strong> {_fmt(fighter.get('height'))}
+               &nbsp;·&nbsp; <strong>Weight:</strong> {_fmt(fighter.get('weight'))}
+               &nbsp;·&nbsp; <strong>Reach:</strong> {_fmt(fighter.get('reach'))}</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -328,9 +567,8 @@ def render_fighter_card(fighter: pd.Series) -> None:
 
 
 def page_fighter_explorer(df: pd.DataFrame) -> None:
-    """Page 1 — single-fighter profile + stat charts + recent fights."""
     st.title("Fighter Explorer")
-    st.caption("Pick any fighter to see their profile, career averages, and recent fight history.")
+    st.caption("Pick any fighter to inspect their profile, career averages, and recent bouts.")
 
     names = df["name"].dropna().sort_values().unique().tolist()
     default_idx = names.index("Jon Jones") if "Jon Jones" in names else 0
@@ -344,13 +582,13 @@ def page_fighter_explorer(df: pd.DataFrame) -> None:
     with col2:
         st.metric("SLpM", _fmt(fighter.get("slpm")))
         st.metric("Str. Acc.", _fmt(fighter.get("str_acc"), "%"))
-        st.metric("KO win %", _fmt(fighter.get("ko_rate"), "%"))
+        st.metric("KO/TKO win %", _fmt(fighter.get("ko_rate"), "%"))
     with col3:
         st.metric("TD Avg.", _fmt(fighter.get("td_avg")))
         st.metric("TD Def.", _fmt(fighter.get("td_def"), "%"))
         st.metric("SUB win %", _fmt(fighter.get("sub_rate"), "%"))
 
-    streak_col, last_col, active_col = st.columns(3)
+    streak_col, last_col, peak_col = st.columns(3)
     with streak_col:
         ws = fighter.get("win_streak") or 0
         ls = fighter.get("loss_streak") or 0
@@ -366,27 +604,24 @@ def page_fighter_explorer(df: pd.DataFrame) -> None:
         if last_dt and not (isinstance(last_dt, float) and pd.isna(last_dt)):
             try:
                 last_str = pd.to_datetime(last_dt).date().isoformat()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 last_str = str(last_dt)
         st.metric("Last fight", last_str)
-    with active_col:
-        is_champ = bool(fighter.get("is_champion", False))
-        st.metric("Champion", "🏆 Yes" if is_champ else "—")
+    with peak_col:
+        peak = fighter.get("max_win_streak")
+        st.metric("Peak win streak", _fmt(peak) if peak else "—")
 
-    st.markdown("### Career stats")
+    _section_title("Career stats")
     c1, c2 = st.columns(2)
     with c1:
         st.plotly_chart(charts.fighter_striking_bar(fighter), use_container_width=True)
     with c2:
         st.plotly_chart(charts.fighter_grappling_bar(fighter), use_container_width=True)
 
-    st.markdown("### Recent fights")
+    _section_title("Recent fights")
     fights = _load_cached_fights()
     if fights is None or fights.empty:
-        st.info(
-            "Fight history not loaded — click **🔄 Refresh data** in the sidebar "
-            "to scrape per-fight rows (one-time cost, ~3-5 minutes)."
-        )
+        st.info("Fight history not loaded. Click 🔄 Refresh data in the sidebar.")
     else:
         own = fights[fights["fighter_url"] == fighter.get("url")].copy()
         if own.empty:
@@ -396,21 +631,12 @@ def page_fighter_explorer(df: pd.DataFrame) -> None:
             recent = own.head(5)[
                 ["result", "opponent", "method", "method_detail", "round", "time", "event", "event_date"]
             ].rename(columns={
-                "result": "Result",
-                "opponent": "Opponent",
-                "method": "Method",
-                "method_detail": "Detail",
-                "round": "Rd",
-                "time": "Time",
-                "event": "Event",
-                "event_date": "Date",
+                "result": "Result", "opponent": "Opponent", "method": "Method",
+                "method_detail": "Detail", "round": "Rd", "time": "Time",
+                "event": "Event", "event_date": "Date",
             })
             st.dataframe(recent.reset_index(drop=True), use_container_width=True, hide_index=True)
 
-
-# ---------------------------------------------------------------------------
-# Page 2 — Fighter Comparison
-# ---------------------------------------------------------------------------
 
 COMPARE_STATS: list[tuple[str, str, bool]] = [
     ("slpm", "SLpM", True),
@@ -426,16 +652,7 @@ COMPARE_STATS: list[tuple[str, str, bool]] = [
 ]
 
 
-def _winner_class(winner: str, side: str) -> str:
-    if winner == "tie":
-        return "tie"
-    if winner == side:
-        return "win"
-    return "lose"
-
-
 def page_fighter_comparison(df: pd.DataFrame) -> None:
-    """Page 2 — multi-fighter comparison (2 to 5) with H2H lookup."""
     st.title("Fighter Comparison")
     st.caption("Pick 2 to 5 fighters to overlay their stat profiles.")
 
@@ -463,12 +680,15 @@ def page_fighter_comparison(df: pd.DataFrame) -> None:
 
     st.plotly_chart(charts.multi_radar(fighters), use_container_width=True)
 
-    st.markdown("### Stat-by-stat")
-    # Header row: stat name + one column per fighter
+    _section_title("Stat-by-stat")
     cols = st.columns([2] + [2] * len(fighters))
-    cols[0].markdown("**Stat**")
+    cols[0].markdown("<div class='stat-name'><strong>Stat</strong></div>", unsafe_allow_html=True)
     for i, f in enumerate(fighters):
-        cols[i + 1].markdown(f"**{f['name']}**")
+        cols[i + 1].markdown(
+            f"<div class='val' style='color:var(--text-primary);'>"
+            f"<strong>{f['name']}</strong></div>",
+            unsafe_allow_html=True,
+        )
 
     for col, label, higher_better in COMPARE_STATS:
         values: list[float | None] = []
@@ -480,36 +700,29 @@ def page_fighter_comparison(df: pd.DataFrame) -> None:
                 values.append(None)
 
         present = [v for v in values if v is not None]
-        if not present:
-            best = None
-        else:
-            best = max(present) if higher_better else min(present)
+        best = (max(present) if higher_better else min(present)) if present else None
 
         cols = st.columns([2] + [2] * len(fighters))
-        cols[0].markdown(
-            f"<div class='stat-name'>{label}</div>", unsafe_allow_html=True
-        )
+        cols[0].markdown(f"<div class='stat-name'>{label}</div>", unsafe_allow_html=True)
         for i, v in enumerate(values):
             if v is None:
                 text, cls = "—", "tie"
             else:
                 text = f"{v:.2f}"
                 cls = "win" if best is not None and v == best else "lose"
-                # ties shouldn't all be marked win — if best appears more than once
                 if best is not None and values.count(best) > 1:
                     cls = "tie"
             cols[i + 1].markdown(
                 f"<div class='val {cls}'>{text}</div>", unsafe_allow_html=True
             )
 
-    st.markdown("### Head-to-Head")
+    _section_title("Head-to-Head")
     fights = _load_cached_fights()
     if fights is None or fights.empty:
-        st.info("Fight history not loaded — click **🔄 Refresh data** in the sidebar.")
+        st.info("Fight history not loaded — click 🔄 Refresh data in the sidebar.")
         return
 
     h2h_rows = []
-    picked_urls = {f.get("url") for f in fighters}
     for a in fighters:
         own_fights = fights[fights["fighter_url"] == a.get("url")]
         for _, fight in own_fights.iterrows():
@@ -528,23 +741,16 @@ def page_fighter_comparison(df: pd.DataFrame) -> None:
                     })
 
     if h2h_rows:
-        # Dedupe (each fight appears from both fighters' perspectives)
         h2h_df = pd.DataFrame(h2h_rows).drop_duplicates(subset=["Event", "Date"])
         st.dataframe(h2h_df.reset_index(drop=True), use_container_width=True, hide_index=True)
     else:
         st.info("No previous meetings between these fighters on record.")
 
 
-# ---------------------------------------------------------------------------
-# Page 3 — Rankings / Leaderboard
-# ---------------------------------------------------------------------------
-
 NUMERIC_STAT_LABELS = {
-    # Record
     "wins": "Wins",
     "losses": "Losses",
     "ufc_fights_counted": "UFC fights",
-    # Career averages
     "slpm": "SLpM",
     "str_acc": "Str. Acc. %",
     "sapm": "SApM",
@@ -553,44 +759,37 @@ NUMERIC_STAT_LABELS = {
     "td_acc": "TD Acc. %",
     "td_def": "TD Def. %",
     "sub_avg": "Sub. Avg.",
-    # Win-method counts
     "ko_wins": "KO wins",
     "tko_wins": "TKO wins",
     "sub_wins": "SUB wins",
     "dec_wins": "DEC wins",
     "finish_wins": "Finish wins (KO+TKO+SUB)",
-    # Win-method rates
     "ko_rate": "KO/TKO win %",
     "sub_rate": "SUB win %",
     "dec_rate": "DEC win %",
     "finish_rate": "Finish win %",
-    # Loss-method counts + rate
     "ko_losses": "KO losses",
     "tko_losses": "TKO losses",
     "sub_losses": "SUB losses",
     "dec_losses": "DEC losses",
     "finished_losses": "Times finished",
     "finished_loss_rate": "Finished loss %",
-    # Streaks
     "win_streak": "Current win streak",
     "loss_streak": "Current loss streak",
     "max_win_streak": "Highest win streak (UFC)",
     "max_loss_streak": "Highest loss streak (UFC)",
-    # Title
     "title_fights": "Title fights",
     "title_wins": "Title wins",
     "title_losses": "Title losses",
     "title_defenses": "Title defenses",
-    # Pace
     "avg_fight_seconds": "Avg. fight time (sec)",
     "avg_round_ended": "Avg. round ended",
 }
 
 
 def page_rankings(df: pd.DataFrame) -> None:
-    """Page 3 — filterable, sortable leaderboard with top-10 charts."""
     st.title("Rankings & Leaderboards")
-    st.caption("Use the **Min. UFC fights** slider in the sidebar to filter out small-sample noise.")
+    st.caption("Filterable, sortable, exportable. Use the sidebar filters for noise reduction.")
 
     weight_classes = ["All"] + sorted(
         c for c in df["weight_class"].dropna().unique().tolist() if c != "Unknown"
@@ -628,19 +827,20 @@ def page_rankings(df: pd.DataFrame) -> None:
         sort_by, ascending=ascending, na_position="last"
     )
 
-    st.dataframe(display.reset_index(drop=True), use_container_width=True, height=460)
+    st.dataframe(display.reset_index(drop=True), use_container_width=True, height=480)
     st.download_button(
-        "⬇ Download filtered CSV",
+        "⬇  Download filtered CSV",
         data=display.to_csv(index=False).encode("utf-8"),
         file_name=f"ufc_rankings_{wc.replace(' ', '_').lower()}_{sort_by}.csv",
         mime="text/csv",
     )
 
-    st.markdown("### Top 10 leaderboards")
+    _section_title("Top 10 leaderboards")
     cat = st.selectbox(
         "Category",
-        ["str_def", "td_def", "td_acc", "slpm", "sub_avg", "td_avg", "str_acc"],
-        format_func=lambda k: NUMERIC_STAT_LABELS[k],
+        ["str_def", "td_def", "td_acc", "slpm", "sub_avg", "td_avg", "str_acc",
+         "finish_wins", "ko_wins", "sub_wins", "max_win_streak", "title_defenses"],
+        format_func=lambda k: NUMERIC_STAT_LABELS.get(k, k),
     )
     st.plotly_chart(
         charts.top_n_bar(subset, cat, NUMERIC_STAT_LABELS[cat]),
@@ -648,38 +848,23 @@ def page_rankings(df: pd.DataFrame) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Page 4 — Stat Universe (clickable scatter of all fighters)
-# ---------------------------------------------------------------------------
-
 def page_stat_universe(df: pd.DataFrame) -> None:
-    """
-    Page 4 — the "all fighters in one graph" view.
-
-    Pick any X stat and any Y stat — every fighter appears as a point
-    on that XY plane. Click any point to open an inline info panel.
-    """
     st.title("Stat Universe")
-    st.caption(
-        "Plot every UFC fighter on an XY chart. Pick any metric for each axis, "
-        "then click a point to inspect that fighter."
-    )
+    st.caption("Plot every fighter on an XY chart. Pick any metrics — click any point to inspect.")
 
     stat_keys = list(NUMERIC_STAT_LABELS.keys())
 
     col_x, col_y, col_color = st.columns(3)
     with col_x:
         x_stat = st.selectbox(
-            "X axis",
-            stat_keys,
+            "X axis", stat_keys,
             index=stat_keys.index("slpm"),
             format_func=lambda k: NUMERIC_STAT_LABELS[k],
             key="universe_x",
         )
     with col_y:
         y_stat = st.selectbox(
-            "Y axis",
-            stat_keys,
+            "Y axis", stat_keys,
             index=stat_keys.index("td_def"),
             format_func=lambda k: NUMERIC_STAT_LABELS[k],
             key="universe_y",
@@ -714,33 +899,14 @@ def page_stat_universe(df: pd.DataFrame) -> None:
 
     col_zscore, col_champs, col_trend = st.columns(3)
     with col_zscore:
-        z_score = st.checkbox(
-            "Normalize within weight class (z-score)",
-            value=False,
-            help=(
-                "A flyweight's 4 SLpM ≠ a heavyweight's 4 SLpM. Toggling this "
-                "z-scores each axis against same-division peers so divisions "
-                "are comparable."
-            ),
-        )
+        z_score = st.checkbox("Normalize within weight class (z-score)", value=False)
     with col_champs:
         highlight_champs = st.checkbox(
-            "Highlight champions 🏆",
-            value=False,
+            "Highlight champions 🏆", value=False,
             disabled="is_champion" not in df.columns,
         )
     with col_trend:
-        show_trendline = st.checkbox(
-            "Show OLS trendline",
-            value=False,
-            help=(
-                "Fits a least-squares line through every visible point and "
-                "shows the equation + R² in the legend. Useful for spotting "
-                "stat correlations at a glance (e.g. does TD Avg predict SLpM?)."
-            ),
-        )
-
-    st.caption("Use the **Min. UFC fights** slider in the sidebar to filter out small-sample outliers (the 0% / 50% / 100% spikes).")
+        show_trendline = st.checkbox("Show trendline", value=False)
 
     subset = df.copy()
     if wc != "All":
@@ -750,15 +916,12 @@ def page_stat_universe(df: pd.DataFrame) -> None:
         st.warning("No fighters match this filter with values for both selected stats.")
         return
 
-    # Searchable highlight — picks come from the full df, not the filtered
-    # subset, so a search can surface a fighter even if the sidebar filter
-    # would otherwise hide them.
     all_names = sorted(df["name"].dropna().unique().tolist())
     highlight_names = st.multiselect(
-        "🔍 Search fighter(s) to highlight on the chart",
+        "🔍 Search fighter(s) to highlight",
         options=all_names,
         default=[],
-        placeholder="Type a name… e.g. Jon Jones, Khabib Nurmagomedov",
+        placeholder="Type a name…",
         key="universe_search",
     )
 
@@ -768,10 +931,9 @@ def page_stat_universe(df: pd.DataFrame) -> None:
             extras = df[df["name"].isin(missing)]
             subset = pd.concat([subset, extras], ignore_index=True)
             st.caption(
-                f"Showing {len(missing)} searched fighter(s) below the **Min. UFC fights** cutoff."
+                f"Showing {len(missing)} searched fighter(s) below the Min. UFC fights cutoff."
             )
 
-    # Champion overlay → append champion names to highlight set
     if highlight_champs and "is_champion" in subset.columns:
         champ_names = subset[subset["is_champion"].fillna(False)]["name"].dropna().tolist()
         highlight_names = list(dict.fromkeys(highlight_names + champ_names))
@@ -810,15 +972,15 @@ def page_stat_universe(df: pd.DataFrame) -> None:
 
     selected_name: str | None = None
     try:
-        points = event["selection"]["points"]  # type: ignore[index]
+        points = event["selection"]["points"]
         if points:
             selected_name = points[0]["customdata"][0]
     except (KeyError, TypeError, IndexError):
         selected_name = None
 
-    st.markdown("### Fighter detail")
+    _section_title("Fighter detail")
     if selected_name is None:
-        st.info("Click any point on the scatter above to see fighter details here.")
+        st.info("Click any point on the scatter to see fighter details.")
     else:
         match = subset[subset["name"] == selected_name]
         if match.empty:
@@ -836,7 +998,7 @@ def page_stat_universe(df: pd.DataFrame) -> None:
                     f"{int(fighter.get('wins', 0))}-{int(fighter.get('losses', 0))}-{int(fighter.get('draws', 0))}",
                 )
 
-    st.markdown("### Distributions")
+    _section_title("Distributions")
     d1, d2 = st.columns(2)
     with d1:
         st.plotly_chart(
@@ -850,29 +1012,20 @@ def page_stat_universe(df: pd.DataFrame) -> None:
         )
 
 
-# ---------------------------------------------------------------------------
-# Page 5 — Insights
-# ---------------------------------------------------------------------------
-
 def page_insights(df: pd.DataFrame) -> None:
-    """Page 5 — correlation heatmap + categorical breakdowns."""
     st.title("Insights")
-    st.caption(
-        "Cross-stat correlations and categorical breakdowns. Sidebar filters "
-        "(min-fights, active-only) apply."
-    )
+    st.caption("Cross-stat correlations and categorical breakdowns.")
 
-    st.markdown("### Stat correlations")
+    _section_title("Stat correlations")
     st.caption(
-        "Red cells = positive correlation, blue = negative. "
-        "Useful for spotting style trade-offs (e.g. high TD Avg vs SLpM)."
+        "Red = positive correlation, blue = negative. Spot style trade-offs at a glance."
     )
     st.plotly_chart(
         charts.correlation_heatmap(df, NUMERIC_STAT_LABELS),
         use_container_width=True,
     )
 
-    st.markdown("### Group breakdowns")
+    _section_title("Group breakdowns")
     col_group, col_stat = st.columns(2)
     with col_group:
         group_opts = {"stance": "Stance", "weight_class": "Weight class"}
@@ -900,7 +1053,7 @@ def page_insights(df: pd.DataFrame) -> None:
     )
 
     if "is_champion" in df.columns:
-        st.markdown("### Champions vs the field")
+        _section_title("Champions vs the field")
         champs = df[df["is_champion"].fillna(False)]
         rest = df[~df["is_champion"].fillna(False)]
         rows = []
@@ -920,20 +1073,10 @@ def page_insights(df: pd.DataFrame) -> None:
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
-
 def main() -> None:
-    """Streamlit entry point."""
     inject_theme()
-
     df = get_dataframe()
     page, min_ufc_fights, active_only = render_sidebar(df)
-
-    # Explorer / Comparison let you pick *any* fighter by name regardless of
-    # career length — the sample-size filter only matters for distributions
-    # and leaderboards, so those two pages keep the unfiltered df.
     chart_df = apply_global_filter(df, min_ufc_fights, active_only)
 
     if page == "Fighter Explorer":

@@ -75,7 +75,6 @@ class TestClassifyWeight:
         assert _classify_weight(weight) == expected
 
     def test_below_strawweight_still_strawweight(self):
-        # 100 lbs has no division, gets bucketed up to Strawweight (≤115).
         assert _classify_weight(100) == "Strawweight"
 
     def test_none_is_unknown(self):

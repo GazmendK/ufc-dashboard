@@ -86,7 +86,6 @@ CAREER_STATS_HTML = textwrap.dedent("""
 
 
 def _fight_row(result, our_name, opponent, kd, str_, td, sub, event, date, method, detail, rnd, time):
-    """Render one b-fight-details__table-row matching ufcstats.com markup."""
     return f"""
 <tr class="b-fight-details__table-row">
   <td class="b-fight-details__table-col">
@@ -148,7 +147,6 @@ class TestParseListPage:
         assert jon["url"] == "http://ufcstats.com/fighter-details/abc123"
 
     def test_skips_malformed_rows(self):
-        # Third row has only one cell — must not appear in the output.
         rows = _parse_list_page(LISTING_HTML)
         assert all(r["last_name"] in {"Jones", "Nurmagomedov"} for r in rows)
 
@@ -172,7 +170,6 @@ class TestParseCareerStats:
     def test_missing_blocks_return_empty_strings(self):
         soup = BeautifulSoup("<html><body></body></html>", "html.parser")
         stats = _parse_career_stats(soup)
-        # All eight keys present, all empty
         assert set(stats.keys()) == {
             "slpm", "str_acc", "sapm", "str_def",
             "td_avg", "td_acc", "td_def", "sub_avg",

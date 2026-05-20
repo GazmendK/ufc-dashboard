@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import argparse
@@ -90,7 +89,7 @@ def _dump_fighter(df: pd.DataFrame, fighter_name: str) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser()
     parser.add_argument("--fighter", help="Dump full fight history for one fighter")
     parser.add_argument("--top", type=int, default=15, help="How many rows per leaderboard")
     args = parser.parse_args()

@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import pandas as pd
@@ -38,12 +37,11 @@ class TestClassifyMethod:
         assert _classify_method(raw) == expected
 
     def test_non_string_safe(self):
-        assert _classify_method(None) == "OTHER"  # type: ignore[arg-type]
+        assert _classify_method(None) == "OTHER"
 
 
 class TestCurrentStreak:
     def test_three_win_streak(self):
-        # Most-recent-first ordering
         wins, losses = _current_streak(["win", "win", "win", "loss"])
         assert wins == 3
         assert losses == 0
@@ -61,7 +59,6 @@ class TestCurrentStreak:
         assert _current_streak([]) == (0, 0)
 
     def test_draw_at_top_yields_zeros(self):
-        # A draw / NC at most recent fight resets both counters to 0.
         wins, losses = _current_streak(["draw", "win", "win"])
         assert (wins, losses) == (0, 0)
 
@@ -70,19 +67,12 @@ class TestCurrentStreak:
         assert wins == 2
 
 
-# ---------------------------------------------------------------------------
-# enrich_with_fight_data — the main integration point
-# ---------------------------------------------------------------------------
-
 def _fights_df():
-    """Build a fights DataFrame with two fighters of varying outcomes."""
     rows = [
-        # Fighter A: 3 wins (2 KO, 1 SUB), 1 loss — currently on a 3-win streak
         {"fighter_url": "url_A", "result": "win",  "method": "KO/TKO", "event_date": "Nov. 16, 2025"},
         {"fighter_url": "url_A", "result": "win",  "method": "SUB",    "event_date": "Mar. 04, 2025"},
         {"fighter_url": "url_A", "result": "win",  "method": "KO/TKO", "event_date": "Jul. 30, 2024"},
         {"fighter_url": "url_A", "result": "loss", "method": "DEC",    "event_date": "Feb. 11, 2023"},
-        # Fighter B: 1 win 1 loss, last fight was a loss
         {"fighter_url": "url_B", "result": "loss", "method": "DEC",    "event_date": "Jan. 15, 2024"},
         {"fighter_url": "url_B", "result": "win",  "method": "DEC",    "event_date": "Jun. 02, 2023"},
     ]
@@ -95,7 +85,7 @@ def _fighters_df():
     return pd.DataFrame([
         {"name": "Alpha", "url": "url_A", "weight_class": "Lightweight"},
         {"name": "Bravo", "url": "url_B", "weight_class": "Lightweight"},
-        {"name": "Jon Jones", "url": "url_C", "weight_class": "Heavyweight"},  # in champ list
+        {"name": "Jon Jones", "url": "url_C", "weight_class": "Heavyweight"},
     ])
 
 
@@ -103,7 +93,6 @@ class TestEnrichWithFightData:
     def test_finish_rates_for_fighter_a(self):
         out = enrich_with_fight_data(_fighters_df(), _fights_df())
         a = out[out["name"] == "Alpha"].iloc[0]
-        # 3 wins: 2 KO + 1 SUB → 66.67% KO, 33.33% SUB, 0% DEC
         assert a["ko_rate"] == pytest.approx(66.6667, abs=0.01)
         assert a["sub_rate"] == pytest.approx(33.3333, abs=0.01)
         assert a["dec_rate"] == 0.0
@@ -130,7 +119,6 @@ class TestEnrichWithFightData:
 
     def test_fighter_with_no_history_has_null_streak(self):
         out = enrich_with_fight_data(_fighters_df(), _fights_df())
-        # Jon Jones (url_C) has no rows in our fixture fights_df
         jj = out[out["name"] == "Jon Jones"].iloc[0]
         assert pd.isna(jj["win_streak"]) or jj["win_streak"] == 0 or jj["win_streak"] is None
 
@@ -147,8 +135,6 @@ class TestEnrichWithFightData:
 
 class TestMaxStreak:
     def test_peak_when_currently_losing(self):
-        # Most-recent-first: lost last, won 10 before, lost before that.
-        # The current win streak is 0, but the peak should be 10.
         results = ["loss"] + ["win"] * 10 + ["loss"] * 3 + ["win"] * 2
         assert _max_streak(results, {"win", "w"}) == 10
 
@@ -176,7 +162,7 @@ class TestClassifyKoTko:
             ("KO/TKO", "Doctor Stoppage", "TKO"),
             ("KO/TKO", "Corner Stoppage", "TKO"),
             ("KO/TKO", "Retirement", "TKO"),
-            ("SUB", "Guillotine Choke", ""),  # not a KO/TKO at all
+            ("SUB", "Guillotine Choke", ""),
             ("DEC", "", ""),
         ],
     )
@@ -186,15 +172,12 @@ class TestClassifyKoTko:
 
 class TestFightTimeSeconds:
     def test_first_round_finish(self):
-        # Round 1, 4:30 in → 4*60+30 = 270 seconds
         assert _fight_time_seconds("4:30", 1) == 270
 
     def test_third_round_finish(self):
-        # 2 full rounds (600s) + 1:00 into round 3 = 660s
         assert _fight_time_seconds("1:00", 3) == 660
 
     def test_full_5_round_decision(self):
-        # Round 5, 5:00 in → 4*300 + 5*60 = 1500s
         assert _fight_time_seconds("5:00", 5) == 1500
 
     def test_returns_none_when_garbage(self):
@@ -228,11 +211,8 @@ class TestAttachTitleFlags:
 
 
 class TestDerivedWithTitleEvents:
-    """End-to-end check that title aggregation lands in the merged df."""
-
     def test_title_wins_and_defenses(self):
         fights = pd.DataFrame([
-            # Chronological (oldest first in this fixture, sorted inside derive)
             {"fighter_url": "url_A", "result": "win", "method": "KO/TKO",
              "method_detail": "Punch", "event": "UFC 100", "opponent": "Bob",
              "round": "2", "time": "1:30",
@@ -263,7 +243,6 @@ class TestDerivedWithTitleEvents:
 
         out = enrich_with_fight_data(fighters, fights, events)
         row = out.iloc[0]
-        # 3 title fights, 3 title wins, 2 defenses (wins after first title win)
         assert row["title_fights"] == 3
         assert row["title_wins"] == 3
         assert row["title_defenses"] == 2
@@ -290,17 +269,9 @@ class TestIsCompleted:
 
 
 class TestSilvaStyleStreakRegression:
-    """
-    Models the Anderson Silva bug: a fighter with a 16-win streak followed
-    by a loss should report max_win_streak == 16, not 17. Adds a "next"
-    upcoming-fight row, an "nc" (overturned) row, and a duplicate scrape
-    artefact — none of which should inflate the streak or fight count.
-    """
-
     @staticmethod
     def _build_silva_like():
         rows = []
-        # 16 chronological wins (oldest → newest by date)
         for i in range(16):
             year = 2006 + (i // 3)
             month = ((i * 4) % 12) + 1
@@ -315,7 +286,6 @@ class TestSilvaStyleStreakRegression:
                 "opponent": f"Opponent {i+1}",
                 "event_date": f"{['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month-1]}. 01, {year}",
             })
-        # Loss to Weidman (ends the streak)
         rows.append({
             "fighter_url": "url_AS",
             "result": "loss", "method": "KO/TKO", "method_detail": "Punch",
@@ -323,8 +293,6 @@ class TestSilvaStyleStreakRegression:
             "event": "UFC 162", "opponent": "Chris Weidman",
             "event_date": "Jul. 06, 2013",
         })
-        # "next" placeholder row from ufcstats.com (upcoming exhibition).
-        # Pre-fix this would have been counted in ufc_fights_counted.
         rows.append({
             "fighter_url": "url_AS",
             "result": "next", "method": "", "method_detail": "",
@@ -332,7 +300,6 @@ class TestSilvaStyleStreakRegression:
             "event": "Future Fight", "opponent": "TBA",
             "event_date": "",
         })
-        # An overturned-to-NC bout that should not count as a win.
         rows.append({
             "fighter_url": "url_AS",
             "result": "nc", "method": "Overturned", "method_detail": "",
@@ -340,7 +307,6 @@ class TestSilvaStyleStreakRegression:
             "event": "UFC 183", "opponent": "Nick Diaz",
             "event_date": "Jan. 31, 2015",
         })
-        # Duplicate scrape artefact of the last win — must be deduped.
         rows.append(rows[15].copy())
 
         df = pd.DataFrame(rows)
@@ -356,10 +322,7 @@ class TestSilvaStyleStreakRegression:
         }])
         out = enrich_with_fight_data(fighters, fights)
         row = out.iloc[0]
-        assert row["max_win_streak"] == 16, (
-            f"expected 16 wins, got {row['max_win_streak']} — likely the 'next' "
-            f"row, NC, or duplicate is being counted as a win"
-        )
+        assert row["max_win_streak"] == 16
 
     def test_ufc_fights_counted_excludes_next_row(self):
         fights = self._build_silva_like()
@@ -367,8 +330,6 @@ class TestSilvaStyleStreakRegression:
             "name": "Anderson Silva", "url": "url_AS", "weight_class": "Middleweight",
         }])
         out = enrich_with_fight_data(fighters, fights)
-        # 16 wins + 1 loss + 1 NC = 18 completed bouts.
-        # The "next" row and the duplicate must NOT inflate the count.
         assert out.iloc[0]["ufc_fights_counted"] == 18
 
     def test_total_wins_excludes_nc_and_next(self):
@@ -380,22 +341,12 @@ class TestSilvaStyleStreakRegression:
         row = out.iloc[0]
         finish_wins = row["finish_wins"]
         dec_wins = row["dec_wins"]
-        # 16 wins total: 8 KO/TKO (even-indexed) + 8 DEC (odd-indexed).
-        # NC must not bump the finish count.
         assert finish_wins + dec_wins == 16
 
 
 class TestOliveiraStyleFinishesRegression:
-    """
-    Models a fighter with a huge finish count whose number must come out
-    intact: 12 SUB wins + 8 KO wins, mixed with decisions and losses.
-    Validates that finish_wins = ko_wins + tko_wins + sub_wins and that
-    decisions don't accidentally fall into the finish bucket.
-    """
-
     def test_finish_count_is_sum_of_methods(self):
         rows = []
-        # 8 KO wins
         for i in range(8):
             rows.append({
                 "fighter_url": "url_CO", "result": "win",
@@ -404,7 +355,6 @@ class TestOliveiraStyleFinishesRegression:
                 "event": f"KO event {i}", "opponent": f"KO Opp {i}",
                 "event_date": f"Jan. 0{(i % 9) + 1}, 2018",
             })
-        # 12 SUB wins
         for i in range(12):
             rows.append({
                 "fighter_url": "url_CO", "result": "win",
@@ -413,7 +363,6 @@ class TestOliveiraStyleFinishesRegression:
                 "event": f"SUB event {i}", "opponent": f"SUB Opp {i}",
                 "event_date": f"Feb. 0{(i % 9) + 1}, 2019",
             })
-        # 4 decision wins (not finishes)
         for i in range(4):
             rows.append({
                 "fighter_url": "url_CO", "result": "win",
@@ -422,7 +371,6 @@ class TestOliveiraStyleFinishesRegression:
                 "event": f"DEC event {i}", "opponent": f"DEC Opp {i}",
                 "event_date": f"Mar. 0{i+1}, 2020",
             })
-        # 9 losses (mix)
         for i in range(9):
             rows.append({
                 "fighter_url": "url_CO", "result": "loss",
@@ -444,14 +392,11 @@ class TestOliveiraStyleFinishesRegression:
         out = enrich_with_fight_data(fighters, fights)
         row = out.iloc[0]
 
-        # 8 KO + 12 SUB = 20 finishes (TKO heuristic may shift KO ↔ TKO
-        # but the sum must remain stable).
         assert row["ko_wins"] + row["tko_wins"] == 8
         assert row["sub_wins"] == 12
         assert row["finish_wins"] == 20
         assert row["dec_wins"] == 4
-        # Decision losses (the odd-indexed losses) shouldn't be counted as finished.
-        assert row["finished_losses"] == 5  # 5 even-indexed KO/TKO losses (i=0,2,4,6,8)
+        assert row["finished_losses"] == 5
 
 
 class TestZScoreByWeightClass:
@@ -461,7 +406,6 @@ class TestZScoreByWeightClass:
             "slpm": [3.0, 4.0, 5.0, 6.0, 1.0, 2.0, 3.0, 4.0],
         })
         z = z_score_by_weight_class(df, "slpm")
-        # Within each weight class, the mean of the z-scores must be ~0.
         df["_z"] = z
         for _, group in df.groupby("weight_class"):
             assert group["_z"].mean() == pytest.approx(0.0, abs=1e-9)
