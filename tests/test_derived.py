@@ -89,6 +89,26 @@ def _fighters_df():
     ])
 
 
+class TestUfcRecordStats:
+    def test_ufc_wins_losses(self):
+        out = enrich_with_fight_data(_fighters_df(), _fights_df())
+        a = out[out["name"] == "Alpha"].iloc[0]
+        assert a["ufc_wins"] == 3
+        assert a["ufc_losses"] == 1
+
+    def test_ufc_win_rate(self):
+        out = enrich_with_fight_data(_fighters_df(), _fights_df())
+        a = out[out["name"] == "Alpha"].iloc[0]
+        b = out[out["name"] == "Bravo"].iloc[0]
+        assert a["ufc_win_rate"] == pytest.approx(75.0)
+        assert b["ufc_win_rate"] == pytest.approx(50.0)
+
+    def test_no_history_yields_na(self):
+        out = enrich_with_fight_data(_fighters_df(), _fights_df())
+        jones = out[out["name"] == "Jon Jones"].iloc[0]
+        assert pd.isna(jones["ufc_wins"])
+
+
 class TestEnrichWithFightData:
     def test_finish_rates_for_fighter_a(self):
         out = enrich_with_fight_data(_fighters_df(), _fights_df())

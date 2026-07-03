@@ -38,6 +38,7 @@ RADAR_STATS = [
     ("str_def", "Str. Def. %"),
     ("td_avg", "TD Avg."),
     ("td_acc", "TD Acc. %"),
+    ("td_def", "TD Def. %"),
     ("sub_avg", "Sub. Avg."),
 ]
 
@@ -169,7 +170,7 @@ def fighter_grappling_bar(fighter: pd.Series) -> go.Figure:
 def _scale_radar(stat_key: str, value) -> float:
     if value is None or pd.isna(value):
         return 0.0
-    if stat_key in {"str_acc", "str_def", "td_acc"}:
+    if stat_key in {"str_acc", "str_def", "td_acc", "td_def"}:
         return float(value)
     if stat_key == "slpm":
         return min(float(value) / 10 * 100, 100)
@@ -507,6 +508,298 @@ def stat_distribution(df: pd.DataFrame, stat: str, label: str) -> go.Figure:
     )
     fig.update_layout(bargap=0.04, height=320, showlegend=False)
     return _base_layout(fig, f"Distribution — {label}")
+
+
+def fight_timeline(own_fights: pd.DataFrame, fighter_name: str) -> go.Figure:
+    df = own_fights.copy()
+    if "event_date_parsed" in df.columns and df["event_date_parsed"].notna().any():
+        df = df.sort_values("event_date_parsed", ascending=True, na_position="first")
+    else:
+        df = df.iloc[::-1]
+
+    net = 0
+    nets: list[int] = []
+    colors: list[str] = []
+    hovers: list[str] = []
+    for _, row in df.iterrows():
+        result = str(row.get("result", "")).strip().lower()
+        if result == "win":
+            net += 1
+            colors.append(ACCENT_EMERALD)
+        elif result == "loss":
+            net -= 1
+            colors.append("#F43F5E")
+        else:
+            colors.append(TEXT_MUTED)
+        nets.append(net)
+        hovers.append(
+            f"<b>{result.upper() or '?'}</b> vs {row.get('opponent', '?')}<br>"
+            f"{row.get('method', '')} · {row.get('event', '')}<br>"
+            f"{row.get('event_date', '')}"
+        )
+
+    x = list(range(1, len(nets) + 1))
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=x, y=nets,
+        mode="lines",
+        line=dict(color=_rgba(ACCENT_SKY, 0.5), width=2, shape="spline", smoothing=0.6),
+        hoverinfo="skip",
+        showlegend=False,
+    ))
+    fig.add_trace(go.Scatter(
+        x=x, y=nets,
+        mode="markers",
+        marker=dict(size=9, color=colors, line=dict(width=1, color=PAPER_BG)),
+        hovertext=hovers,
+        hovertemplate="%{hovertext}<extra></extra>",
+        showlegend=False,
+    ))
+    fig.add_hline(y=0, line=dict(color=GRID_LINE_STRONG, width=1, dash="dot"))
+    fig.update_layout(height=320)
+    fig.update_xaxes(title="UFC fight #", dtick=max(1, len(x) // 12))
+    fig.update_yaxes(title="Net record (W − L)")
+    return _base_layout(fig, f"Career trajectory — {fighter_name}")
+
+
+def win_method_donut(fighter: pd.Series) -> go.Figure:
+    parts = [
+        ("KO", fighter.get("ko_wins"), UFC_RED),
+        ("TKO", fighter.get("tko_wins"), "#FB923C"),
+        ("SUB", fighter.get("sub_wins"), ACCENT_SKY),
+        ("DEC", fighter.get("dec_wins"), ACCENT_VIOLET),
+    ]
+    labels, values, colors = [], [], []
+    for label, val, color in parts:
+        v = pd.to_numeric(val, errors="coerce")
+        if pd.notna(v) and v > 0:
+            labels.append(label)
+            values.append(int(v))
+            colors.append(color)
+
+    fig = go.Figure()
+    if values:
+        fig.add_trace(go.Pie(
+            labels=labels,
+            values=values,
+            hole=0.62,
+            marker=dict(colors=colors, line=dict(width=2, color=PAPER_BG)),
+            textinfo="label+value",
+            textfont=dict(color=UFC_WHITE, family=FONT_FAMILY, size=12),
+            hovertemplate="<b>%{label}</b><br>%{value} wins (%{percent})<extra></extra>",
+            sort=False,
+        ))
+        fig.add_annotation(
+            text=f"<b>{sum(values)}</b><br><span style='font-size:11px;color:{TEXT_MUTED}'>UFC wins</span>",
+            showarrow=False,
+            font=dict(color=UFC_WHITE, size=22, family=FONT_FAMILY),
+        )
+    else:
+        fig.add_annotation(
+            text="No UFC wins on record",
+            showarrow=False,
+            font=dict(color=TEXT_MUTED, size=13, family=FONT_FAMILY),
+        )
+    fig.update_layout(height=320, showlegend=False)
+    return _base_layout(fig, "Win methods")
+
+
+def win_prob_gauge(name1: str, name2: str, prob1: float) -> go.Figure:
+    prob2 = 1.0 - prob1
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=[prob1], y=[""],
+        orientation="h",
+        name=name1,
+        marker_color=UFC_RED,
+        text=f"{prob1 * 100:.1f}%",
+        textposition="inside",
+        insidetextanchor="start",
+        textfont=dict(color=UFC_WHITE, family=FONT_FAMILY, size=15, weight=700),
+        hovertemplate=f"<b>{name1}</b><br>{prob1 * 100:.1f}%<extra></extra>",
+    ))
+    fig.add_trace(go.Bar(
+        x=[prob2], y=[""],
+        orientation="h",
+        name=name2,
+        marker_color=ACCENT_SKY,
+        text=f"{prob2 * 100:.1f}%",
+        textposition="inside",
+        insidetextanchor="end",
+        textfont=dict(color=UFC_WHITE, family=FONT_FAMILY, size=15, weight=700),
+        hovertemplate=f"<b>{name2}</b><br>{prob2 * 100:.1f}%<extra></extra>",
+    ))
+    fig.update_layout(
+        barmode="stack",
+        height=110,
+        margin=dict(l=0, r=0, t=50, b=10),
+        paper_bgcolor=PAPER_BG,
+        plot_bgcolor=PLOT_BG,
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            y=-1.1,
+            x=0.5,
+            xanchor="center",
+            font=dict(color=UFC_WHITE, family=FONT_FAMILY, size=12),
+        ),
+        xaxis=dict(range=[0, 1], showticklabels=False, showgrid=False, zeroline=False),
+        yaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
+        title=dict(
+            text="Win Probability",
+            font=dict(color=UFC_WHITE, size=15, family=FONT_FAMILY, weight=600),
+            x=0.0,
+        ),
+    )
+    return fig
+
+
+def feature_importance_bar(importances: pd.Series) -> go.Figure:
+    values = list(importances.values)
+    fig = go.Figure(go.Bar(
+        x=values,
+        y=list(importances.index),
+        orientation="h",
+        marker=dict(
+            color=_gradient_bar(values, UFC_RED),
+            line=dict(width=0),
+        ),
+        text=[f"{v:.3f}" for v in values],
+        textposition="outside",
+        textfont=dict(color=UFC_WHITE, family=FONT_FAMILY, size=11),
+        hovertemplate="<b>%{y}</b><br>|coef| = %{x:.3f}<extra></extra>",
+    ))
+    fig.update_layout(height=380, bargap=0.25, showlegend=False)
+    fig.update_xaxes(title="Coefficient magnitude")
+    return _base_layout(fig, "Feature Importance")
+
+
+def network_graph_figure(
+    fighters: pd.DataFrame,
+    fights: pd.DataFrame,
+    weight_class: str | None = None,
+    top_n: int = 60,
+) -> go.Figure:
+    import networkx as nx
+
+    url_to_name = fighters.set_index("url")["name"].to_dict()
+    url_to_wc = (
+        fighters.set_index("url")["weight_class"].to_dict()
+        if "weight_class" in fighters.columns else {}
+    )
+
+    if weight_class and weight_class != "All":
+        eligible = set(fighters[fighters["weight_class"] == weight_class]["url"])
+    else:
+        eligible = set(fighters["url"])
+
+    col = "ufc_fights_counted" if "ufc_fights_counted" in fighters.columns else "total_fights"
+    eligible_df = fighters[fighters["url"].isin(eligible)].copy()
+    eligible_df["_sort"] = pd.to_numeric(eligible_df[col], errors="coerce").fillna(0)
+    top_urls = set(eligible_df.nlargest(top_n, "_sort")["url"])
+
+    completed = fights[
+        fights["result"].str.lower().isin({"win", "loss"}) &
+        fights["fighter_url"].isin(top_urls)
+    ].copy()
+
+    G = nx.Graph()
+    for _, row in completed.iterrows():
+        fname = url_to_name.get(row.get("fighter_url", ""), "")
+        oname = (row.get("opponent") or "").strip()
+        if not fname or not oname:
+            continue
+        result = (row.get("result") or "").lower()
+        G.add_node(fname)
+        G.add_node(oname)
+        if G.has_edge(fname, oname):
+            G[fname][oname]["weight"] += 1
+        else:
+            G.add_edge(fname, oname, weight=1,
+                       winner=fname if result == "win" else oname)
+
+    if not G.nodes:
+        fig = go.Figure()
+        return _base_layout(fig, "Fighter Network — no data")
+
+    pos = nx.spring_layout(G, seed=42, k=1.5 / max(1, len(G.nodes) ** 0.5))
+    degrees = dict(G.degree())
+    max_deg = max(degrees.values()) if degrees else 1
+
+    edge_x: list[float | None] = []
+    edge_y: list[float | None] = []
+    for u, v in G.edges():
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        edge_x += [x0, x1, None]
+        edge_y += [y0, y1, None]
+
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        mode="lines",
+        line=dict(width=0.5, color="rgba(255,255,255,0.07)"),
+        hoverinfo="none",
+        showlegend=False,
+    )
+
+    _WC_COLORS: dict[str, str] = {
+        "Heavyweight": "#EF4444",
+        "Light Heavyweight": "#F97316",
+        "Middleweight": "#EAB308",
+        "Welterweight": "#22C55E",
+        "Lightweight": "#06B6D4",
+        "Featherweight": "#3B82F6",
+        "Bantamweight": "#8B5CF6",
+        "Flyweight": "#EC4899",
+        "Women's Strawweight": "#F43F5E",
+        "Women's Flyweight": "#D946EF",
+        "Women's Bantamweight": "#A855F7",
+        "Women's Featherweight": "#6366F1",
+    }
+    name_to_url = fighters.set_index("name")["url"].to_dict() if "name" in fighters.columns else {}
+
+    nodes = list(G.nodes())
+    node_x = [pos[n][0] for n in nodes]
+    node_y = [pos[n][1] for n in nodes]
+    node_sizes = [8 + 20 * (degrees[n] / max_deg) for n in nodes]
+
+    label_cutoff = sorted(degrees.values(), reverse=True)[
+        min(14, len(degrees) - 1)
+    ] if degrees else 0
+    node_labels = [n if degrees[n] >= max(label_cutoff, 2) else "" for n in nodes]
+
+    def _node_color(name: str) -> str:
+        url = name_to_url.get(name, "")
+        wc = url_to_wc.get(url, "")
+        return _WC_COLORS.get(wc, ACCENT_SKY)
+
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode="markers+text",
+        hoverinfo="text",
+        hovertext=[f"<b>{n}</b><br>{degrees[n]} connections" for n in nodes],
+        text=node_labels,
+        textposition="top center",
+        textfont=dict(size=9, color="rgba(255,255,255,0.75)", family=FONT_FAMILY),
+        showlegend=False,
+        marker=dict(
+            size=node_sizes,
+            color=[_node_color(n) for n in nodes],
+            line=dict(width=0.5, color="rgba(255,255,255,0.2)"),
+        ),
+    )
+
+    fig = go.Figure(data=[edge_trace, node_trace])
+    _base_layout(fig, f"Fighter Network — top {top_n} by UFC bouts")
+    fig.update_layout(
+        height=720,
+        margin=dict(l=0, r=0, t=60, b=0),
+        showlegend=False,
+        hovermode="closest",
+    )
+    fig.update_xaxes(showgrid=False, zeroline=False, showticklabels=False)
+    fig.update_yaxes(showgrid=False, zeroline=False, showticklabels=False)
+    return fig
 
 
 def compare_table_rows(

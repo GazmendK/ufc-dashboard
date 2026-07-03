@@ -11,6 +11,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app import charts, derived  # noqa: E402
+
+try:
+    from app import ml  # noqa: E402
+except ImportError:
+    ml = None
 from scraper import scraper  # noqa: E402
 
 st.set_page_config(
@@ -105,7 +110,10 @@ section[data-testid="stSidebar"] hr {
     background: linear-gradient(135deg, var(--accent), var(--accent-deep));
     border-radius: 10px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 20px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    color: var(--text-primary);
     box-shadow: 0 4px 12px var(--accent-glow);
 }
 .brand-mark .label {
@@ -358,6 +366,11 @@ def _load_cached_events() -> pd.DataFrame | None:
     return scraper.load_cached_events()
 
 
+@st.cache_resource(show_spinner=False)
+def _train_ml_model(n_fighters: int, n_fights: int, _fighters: pd.DataFrame, _fights: pd.DataFrame):
+    return ml.train_model(_fighters, _fights)
+
+
 def _clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     for col in ["wins", "losses", "draws"]:
@@ -413,7 +426,7 @@ def render_sidebar(df: pd.DataFrame) -> tuple[str, int, bool]:
     st.sidebar.markdown(
         """
         <div class="brand-mark">
-            <div class="logo">🥊</div>
+            <div class="logo">UFC</div>
             <div class="label">
                 <strong>UFC Dashboard</strong>
                 <span>Fighter Analytics</span>
@@ -431,6 +444,8 @@ def render_sidebar(df: pd.DataFrame) -> tuple[str, int, bool]:
             "Rankings",
             "Stat Universe",
             "Insights",
+            "ML Matchup",
+            "Network",
         ],
         label_visibility="collapsed",
     )
@@ -487,7 +502,7 @@ def render_sidebar(df: pd.DataFrame) -> tuple[str, int, bool]:
     )
 
     st.sidebar.markdown("---")
-    if st.sidebar.button("🔄 Refresh data", use_container_width=True):
+    if st.sidebar.button("Refresh data", use_container_width=True):
         run_scrape()
         st.rerun()
 
@@ -618,12 +633,26 @@ def page_fighter_explorer(df: pd.DataFrame) -> None:
     with c2:
         st.plotly_chart(charts.fighter_grappling_bar(fighter), use_container_width=True)
 
-    _section_title("Recent fights")
     fights = _load_cached_fights()
-    if fights is None or fights.empty:
-        st.info("Fight history not loaded. Click 🔄 Refresh data in the sidebar.")
-    else:
+    own = pd.DataFrame()
+    if fights is not None and not fights.empty:
         own = fights[fights["fighter_url"] == fighter.get("url")].copy()
+
+    if not own.empty:
+        _section_title("Career trajectory")
+        t1, t2 = st.columns([3, 2])
+        with t1:
+            st.plotly_chart(
+                charts.fight_timeline(own, fighter.get("name", "")),
+                use_container_width=True,
+            )
+        with t2:
+            st.plotly_chart(charts.win_method_donut(fighter), use_container_width=True)
+
+    _section_title("Recent fights")
+    if fights is None or fights.empty:
+        st.info("Fight history not loaded. Click Refresh data in the sidebar.")
+    else:
         if own.empty:
             st.info("No fight history found for this fighter.")
         else:
@@ -719,7 +748,7 @@ def page_fighter_comparison(df: pd.DataFrame) -> None:
     _section_title("Head-to-Head")
     fights = _load_cached_fights()
     if fights is None or fights.empty:
-        st.info("Fight history not loaded — click 🔄 Refresh data in the sidebar.")
+        st.info("Fight history not loaded — click Refresh data in the sidebar.")
         return
 
     h2h_rows = []
@@ -751,6 +780,9 @@ NUMERIC_STAT_LABELS = {
     "wins": "Wins",
     "losses": "Losses",
     "ufc_fights_counted": "UFC fights",
+    "ufc_wins": "UFC wins",
+    "ufc_losses": "UFC losses",
+    "ufc_win_rate": "UFC win %",
     "slpm": "SLpM",
     "str_acc": "Str. Acc. %",
     "sapm": "SApM",
@@ -839,7 +871,8 @@ def page_rankings(df: pd.DataFrame) -> None:
     cat = st.selectbox(
         "Category",
         ["str_def", "td_def", "td_acc", "slpm", "sub_avg", "td_avg", "str_acc",
-         "finish_wins", "ko_wins", "sub_wins", "max_win_streak", "title_defenses"],
+         "finish_wins", "ko_wins", "sub_wins", "max_win_streak", "title_defenses",
+         "ufc_wins", "ufc_win_rate"],
         format_func=lambda k: NUMERIC_STAT_LABELS.get(k, k),
     )
     st.plotly_chart(
@@ -1073,6 +1106,149 @@ def page_insights(df: pd.DataFrame) -> None:
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
+def page_ml_matchup(df: pd.DataFrame, fights: pd.DataFrame | None) -> None:
+    st.title("ML Matchup Predictor")
+    st.caption(
+        "Logistic regression trained on stat differentials from historical UFC fights. "
+        "Pick two fighters to see the predicted win probability."
+    )
+
+    if ml is None:
+        st.error(
+            "scikit-learn is not installed. Run `pip install -r requirements.txt` "
+            "and restart the app."
+        )
+        return
+
+    if fights is None or fights.empty:
+        st.warning("Fight history not loaded. Click Refresh data in the sidebar.")
+        return
+
+    names = df["name"].dropna().sort_values().unique().tolist()
+    col1, col2 = st.columns(2)
+    with col1:
+        fighter1 = st.selectbox(
+            "Fighter 1", names,
+            index=names.index("Jon Jones") if "Jon Jones" in names else 0,
+            key="ml_f1",
+        )
+    with col2:
+        fighter2 = st.selectbox(
+            "Fighter 2", names,
+            index=names.index("Stipe Miocic") if "Stipe Miocic" in names else 1,
+            key="ml_f2",
+        )
+
+    if fighter1 == fighter2:
+        st.warning("Select two different fighters.")
+        return
+
+    with st.spinner("Training model on fight history…"):
+        report = _train_ml_model(len(df), len(fights), df, fights)
+
+    if report is None:
+        st.error("Not enough matched fight records to train the model.")
+        return
+
+    prob = ml.predict_proba(report.pipeline, df, fighter1, fighter2)
+    if prob is None:
+        st.warning("Could not compute prediction — one or both fighters lack stat data.")
+        return
+
+    _section_title("Win Probability")
+    st.plotly_chart(charts.win_prob_gauge(fighter1, fighter2, prob), use_container_width=True)
+    if abs(prob - 0.5) < 0.05:
+        st.caption("Very close matchup — model has low confidence.")
+
+    meetings = ml.head_to_head(fights, df, fighter1, fighter2)
+    if meetings:
+        lines = []
+        for m in meetings:
+            if m["winner"]:
+                lines.append(
+                    f"**{m['winner']}** won by {m['method']} — {m['event']} ({m['date']})"
+                )
+            else:
+                lines.append(f"No contest / draw — {m['event']} ({m['date']})")
+        st.info("**They have already fought:**\n\n" + "\n\n".join(lines))
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Model accuracy (held-out)", f"{report.accuracy * 100:.1f}%")
+    m2.metric("ROC AUC", f"{report.auc:.3f}")
+    m3.metric("Training fights", f"{report.n_fights:,}")
+    st.caption(
+        "Accuracy is measured on a 20% held-out test split; the final model is then "
+        "refit on all fights. Predictions are for demonstration purposes — styles make fights."
+    )
+
+    _section_title("Stat Advantage")
+    f1_row = df[df["name"] == fighter1].iloc[0]
+    f2_row = df[df["name"] == fighter2].iloc[0]
+    stat_rows = []
+    for c in ml.FEATURE_COLS:
+        if c not in df.columns:
+            continue
+        v1 = pd.to_numeric(f1_row.get(c), errors="coerce")
+        v2 = pd.to_numeric(f2_row.get(c), errors="coerce")
+        if pd.isna(v1) or pd.isna(v2):
+            continue
+        adv = fighter1 if v1 > v2 else (fighter2 if v2 > v1 else "Tied")
+        stat_rows.append({
+            "Stat": ml.FEATURE_LABELS.get(c, c),
+            fighter1: round(float(v1), 2),
+            fighter2: round(float(v2), 2),
+            "Advantage": adv,
+        })
+    if stat_rows:
+        st.dataframe(pd.DataFrame(stat_rows), use_container_width=True, hide_index=True)
+
+    _section_title("Feature Importance")
+    importances = ml.feature_importances(report.pipeline, df)
+    st.plotly_chart(charts.feature_importance_bar(importances), use_container_width=True)
+    st.caption("Absolute logistic regression coefficients — which stats drive fight outcome predictions the most.")
+
+
+def page_network(df: pd.DataFrame, fights: pd.DataFrame | None) -> None:
+    st.title("Fighter Network")
+    st.caption(
+        "Each node is a fighter; each edge is a bout. "
+        "Node size = connections in the graph. Colors = weight class."
+    )
+
+    if fights is None or fights.empty:
+        st.warning("Fight history not loaded. Click Refresh data in the sidebar.")
+        return
+
+    col_wc, col_n = st.columns(2)
+    with col_wc:
+        weight_classes = ["All"] + sorted(
+            c for c in df["weight_class"].dropna().unique().tolist() if c != "Unknown"
+        )
+        wc = st.selectbox("Weight class", weight_classes, key="net_wc")
+    with col_n:
+        top_n = st.slider(
+            "Top N fighters (by UFC bouts)",
+            min_value=20, max_value=150, value=60, step=10,
+            key="net_n",
+        )
+
+    try:
+        with st.spinner("Computing graph layout…"):
+            fig = charts.network_graph_figure(df, fights, weight_class=wc, top_n=top_n)
+    except ImportError:
+        st.error(
+            "networkx is not installed. Run `pip install -r requirements.txt` "
+            "and restart the app."
+        )
+        return
+
+    st.plotly_chart(fig, use_container_width=True, key=f"net_{wc}_{top_n}")
+    st.caption(
+        "Hover any node to see name and connection count. "
+        "Fighters not in fights.csv appear without edges."
+    )
+
+
 def main() -> None:
     inject_theme()
     df = get_dataframe()
@@ -1089,6 +1265,10 @@ def main() -> None:
         page_stat_universe(chart_df)
     elif page == "Insights":
         page_insights(chart_df)
+    elif page == "ML Matchup":
+        page_ml_matchup(df, _load_cached_fights())
+    elif page == "Network":
+        page_network(df, _load_cached_fights())
 
 
 if __name__ == "__main__":

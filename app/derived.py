@@ -217,6 +217,9 @@ def _derive_per_fighter(group: pd.DataFrame) -> pd.Series:
         defenses = None
 
     return pd.Series({
+        "ufc_wins": total_wins,
+        "ufc_losses": total_losses,
+        "ufc_win_rate": _share(total_wins, total_wins + total_losses),
         "ko_wins": ko_wins,
         "tko_wins": tko_wins,
         "sub_wins": sub_wins,
@@ -254,6 +257,7 @@ def z_score_by_weight_class(df: pd.DataFrame, stat: str) -> pd.Series:
 
 
 DERIVED_COLUMNS = [
+    "ufc_wins", "ufc_losses", "ufc_win_rate",
     "ko_wins", "tko_wins", "sub_wins", "dec_wins", "finish_wins",
     "ko_rate", "sub_rate", "dec_rate", "finish_rate",
     "ko_losses", "tko_losses", "sub_losses", "dec_losses",
